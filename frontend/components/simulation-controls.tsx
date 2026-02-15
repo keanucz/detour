@@ -244,6 +244,22 @@ export function SimulationControls({ engine, onExit, onReset }: SimulationContro
                 <RotateCcw size={14} />
               </button>
 
+              {isCollided && (
+                <button
+                  onClick={() => {
+                    setPlaying(false)
+                    setDisplayTick(0)
+                    tickAccum.current = 0
+                    lastFrameRef.current = null
+                    onReset()
+                    setTimeout(() => setPlaying(true), 50)
+                  }}
+                  className="rounded-md bg-cyan-500/20 px-2.5 py-1 text-xs font-medium text-cyan-300 transition hover:bg-cyan-500/30"
+                >
+                  Replay
+                </button>
+              )}
+
               <button
                 onClick={cycleSpeed}
                 className="rounded-md bg-white/10 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-white/20"
