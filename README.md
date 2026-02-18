@@ -25,7 +25,7 @@ We built this for the [NVIDIA Ascent GX10](https://www.asus.com/us/networking-io
 
 **Three ways to run it:**
 
-### 1. 🌐 Browser Mode (No Installation)
+### 1. 🌐 Browser Mode (Default - No Installation) ⭐
 
 Just clone and run the frontend. The AI runs directly in your browser using [WebGPU](https://developer.mozilla.org/en-US/docs/Web/API/WebGPU_API):
 
@@ -43,7 +43,7 @@ Open [http://localhost:3000](http://localhost:3000) and you're done.
 - 4GB+ RAM
 - Any GPU (Intel, NVIDIA, AMD — even integrated graphics)
 
-**How it works:** The first time you click "Run", it downloads a ~1.7GB AI model to your browser cache. After that, everything runs locally with zero latency.
+**How it works:** The app auto-detects WebGPU and uses it by default. The first time you click "Run", it downloads a ~1.7GB AI model to your browser cache. After that, everything runs locally with zero latency and **no GPU server needed** — perfect for deploying alongside other services in your homelab!
 
 ---
 
@@ -197,15 +197,17 @@ They work together in a [LangGraph](https://www.langchain.com/langgraph) pipelin
 
 You can switch between three backends depending on your needs:
 
-### Option 1: WebGPU (Browser)
+### Option 1: WebGPU (Browser) — **DEFAULT** ⭐
 
-**When to use:** Demos, development, deployment to a website
+**When to use:** Demos, development, deployment to a website, homelab deployments
 
 **Pros:**
+- **Auto-selected by default** (no configuration needed)
 - Zero installation
 - Runs offline after first load
 - Works on any device with a modern browser
 - Free (no API costs)
+- **Doesn't consume GPU server resources** — perfect for homelabs running multiple services
 
 **Cons:**
 - Smaller models (Qwen3-1.7B vs Nemotron-30B)
@@ -214,9 +216,13 @@ You can switch between three backends depending on your needs:
 **How to use:**
 1. Open the app in Chrome/Edge
 2. Click the terminal at the bottom
-3. Click ⚙️ Settings → WebLLM
-4. Click Initialize (first time only)
-5. Click Run
+3. Click Run — it auto-selects WebGPU!
+4. First run: model downloads (~1.7GB), then cached forever
+
+**To manually switch:**
+1. Click ⚙️ Settings → WebLLM
+2. Choose a model
+3. Click Initialize → Run
 
 **Available models:**
 - Qwen3-0.6B (600MB, fast)
@@ -355,6 +361,42 @@ NEMOTRON_API_KEY=
 
 ## Deployment
 
+### Homelab Deployment (Recommended for Komodo Stack) 🏠
+
+**Perfect for homelabs!** WebGPU mode means the AI runs in users' browsers, not on your server:
+
+```yaml
+# docker-compose.yml (Komodo stack compatible)
+services:
+  detour-frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    # No GPU needed! WebGPU runs in the browser
+
+  detour-backend:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - NEMOTRON_BASE_URL=http://ollama:11434/v1  # Optional
+    # Backend only needed for physics calculations
+    # LLM inference happens in the browser via WebGPU
+```
+
+**Benefits for homelab:**
+- ✅ No GPU allocation needed — saves resources for other services
+- ✅ Users get low-latency inference (runs on their device)
+- ✅ Scales infinitely (each user uses their own browser GPU)
+- ✅ Works alongside GPU-heavy services (Stable Diffusion, Ollama, etc.)
+
+**To disable backend LLM entirely:**
+Just deploy the frontend. Users will automatically use WebGPU. Set up backend only if you need the full multi-agent physics pipeline.
+
+---
+
 ### Static Site Hosting (WebGPU Only)
 
 Since WebGPU runs in the browser, you can deploy the frontend as a static site:
@@ -370,14 +412,15 @@ Deploy to:
 - **Netlify:** `netlify deploy`
 - **GitHub Pages:** `npm run deploy`
 - **AWS S3:** Upload `out/` folder
+- **Homelab reverse proxy:** Nginx, Caddy, Traefik
 
-No backend needed — the AI runs in the user's browser!
+No backend or GPU needed — the AI runs in the user's browser!
 
 ---
 
 ### Full Stack Deployment (with Backend)
 
-Deploy backend + frontend + Ollama/vLLM:
+Deploy backend + frontend + Ollama/vLLM (optional):
 
 **Using Docker:**
 ```bash
@@ -388,7 +431,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
 1. Deploy backend (FastAPI) to any Python host (Render, Railway, Fly.io)
 2. Deploy frontend to Vercel/Netlify
 3. Point frontend to backend URL in `.env`
-4. Run Ollama/vLLM on a separate GPU server
+4. *Optional:* Run Ollama/vLLM on a separate GPU server (only if users want to switch from WebGPU)
 
 ---
 

@@ -10,7 +10,15 @@
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from "react"
 import { cn } from "@/lib/utils"
-import { LLMProvider, createDefaultProvider, WEBLLM_MODELS, type AgentEvent, type LLMBackendType } from "@/lib/llm-provider"
+import {
+  LLMProvider,
+  createDefaultProvider,
+  WEBLLM_MODELS,
+  detectDeviceCapabilities,
+  getRecommendedWebLLMModel,
+  type AgentEvent,
+  type LLMBackendType
+} from "@/lib/llm-provider"
 
 interface AgentLog {
   id: number
@@ -95,7 +103,7 @@ function eventToLog(event: AgentEvent, id: number): AgentLog {
 export const TerminalDrawerWebLLM = forwardRef<TerminalDrawerHandle, TerminalDrawerProps>(
   function TerminalDrawerWebLLM({ isOpen, onToggle, className, onManeuverExecuted }, ref) {
     const [logs, setLogs] = useState<AgentLog[]>([
-      { id: 0, timestamp: formatTime(), text: "agent terminal ready — click ▶ to run pipeline", color: "text-gray-500" },
+      { id: 0, timestamp: formatTime(), text: "agent terminal ready — using browser AI (WebGPU) by default", color: "text-gray-500" },
     ])
     const [running, setRunning] = useState(false)
     const [llmProvider, setLlmProvider] = useState<LLMProvider | null>(null)
@@ -118,8 +126,16 @@ export const TerminalDrawerWebLLM = forwardRef<TerminalDrawerHandle, TerminalDra
     // Initialize LLM provider on mount
     useEffect(() => {
       const provider = createDefaultProvider()
+      const recommendedBackend = LLMProvider.getRecommendedBackend()
+      const device = detectDeviceCapabilities()
+
       setLlmProvider(provider)
-      setBackend(LLMProvider.getRecommendedBackend())
+      setBackend(recommendedBackend)
+
+      // Set the recommended model based on device
+      if (recommendedBackend === "webllm") {
+        setSelectedModel(getRecommendedWebLLMModel())
+      }
 
       return () => {
         provider.cleanup()
