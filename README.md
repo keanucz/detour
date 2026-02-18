@@ -112,9 +112,9 @@ Open [http://localhost:3000](http://localhost:3000)
 
 ### 3. 🚀 Docker Mode (Three Options)
 
-Run with Docker using one of three modes:
+One docker-compose.yml, three ways to run it:
 
-#### Option A: WebGPU Only (Recommended for Homelabs)
+#### Option A: WebGPU Only (Default, Recommended for Homelabs)
 
 Frontend only, AI runs in browsers:
 
@@ -122,14 +122,17 @@ Frontend only, AI runs in browsers:
 git clone https://github.com/keanucz/detour.git
 cd detour
 
-# Start with helper script
+# Easy way (default)
+./start.sh
+
+# Or explicitly
 ./start.sh --webgpu
 
 # Or use docker compose directly
-docker compose -f docker-compose.webgpu.yml up --build
+docker compose up frontend
 ```
 
-This starts just the frontend. Users get AI in their browsers via WebGPU. Perfect for homelabs because it doesn't use any GPU resources on your server.
+This starts ONLY the frontend. No backend, Ollama, or vLLM services will start. Users get AI in their browsers via WebGPU. Perfect for homelabs because it uses zero GPU resources on your server.
 
 #### Option B: Full Stack with Ollama (Better Quality)
 
@@ -139,17 +142,14 @@ Frontend + Backend + Ollama:
 git clone https://github.com/keanucz/detour.git
 cd detour
 
-# Copy environment config
-cp .env.example .env
-
-# Start with helper script (easy way)
+# Easy way
 ./start.sh --ollama
 
-# Or use docker compose directly
-docker compose up --build
+# Or use docker compose with profile
+docker compose --profile ollama up
 ```
 
-First run downloads the Nemotron model (about 20GB, takes 5-10 minutes). After that, startups are instant because the model is cached.
+This starts frontend, backend, and Ollama. First run downloads the Nemotron model (about 20GB, takes 5-10 minutes). After that, startups are instant because the model is cached.
 
 **Windows users:** Use `.\start.ps1` instead of `./start.sh`
 
@@ -161,16 +161,18 @@ Frontend + Backend + vLLM:
 git clone https://github.com/keanucz/detour.git
 cd detour
 
-# Requires NVIDIA GPU
+# Easy way
 ./start.sh --vllm
 
-# Or use docker compose directly
-docker compose --profile vllm up --build
+# Or use docker compose with profile
+docker compose --profile vllm up
 ```
 
-This uses GPU acceleration for faster inference. Requires NVIDIA GPU with 24GB+ VRAM.
+This starts frontend, backend, and vLLM. Requires NVIDIA GPU with 24GB+ VRAM for GPU-accelerated inference.
 
 **All modes:** Open [http://localhost:3000](http://localhost:3000) when ready
+
+**Key insight:** Backend, Ollama, and vLLM services use Docker profiles, so they only start when explicitly requested. Default is WebGPU mode (frontend only).
 
 ---
 
@@ -405,29 +407,33 @@ NEMOTRON_MODEL=nemotron
 
 ### Homelab Deployment (Komodo Stack Ready) 🏠
 
-**Perfect for homelabs!** Use the included `docker-compose.webgpu.yml` for a lightweight deployment:
+**Perfect for homelabs!** The default docker compose runs in WebGPU mode (frontend only):
 
 ```bash
-# WebGPU-only mode (recommended for homelabs)
-docker compose -f docker-compose.webgpu.yml up -d
+# WebGPU-only mode (default, recommended for homelabs)
+docker compose up -d
 
 # Or use the helper script
-./start.sh --webgpu
+./start.sh
 ```
 
-This starts only the frontend. AI runs in users' browsers, so your server stays free for other services.
+This starts ONLY the frontend. Backend, Ollama, and vLLM services don't start at all (they use Docker profiles). AI runs in users' browsers, so your server stays free for other services.
 
 **For Komodo/Portainer stacks:**
 
-Just point to the repo and use `docker-compose.webgpu.yml` as your compose file. Done!
+Just point to the repo and use `docker-compose.yml`. No profile needed. It defaults to frontend only.
 
 **If you need the full agent pipeline with Ollama:**
 
 ```bash
-docker compose up -d
+# Use the ollama profile to start backend + Ollama
+docker compose --profile ollama up -d
+
+# Or use the helper script
+./start.sh --ollama
 ```
 
-This includes frontend, backend, and Ollama. The backend handles physics calculations and the full multi-agent pipeline.
+This starts frontend, backend, and Ollama. The backend handles physics calculations and the full multi-agent pipeline.
 
 **Benefits for homelab:**
 - ✅ No GPU needed on server (WebGPU mode)
@@ -474,14 +480,14 @@ Works on: Vercel, Netlify, Cloudflare Pages, or any static hosting.
 
 **Option 2: Full Stack (Docker)**
 
-Deploy everything with Docker:
+Deploy with Docker:
 
 ```bash
-# WebGPU mode (frontend only)
-docker compose -f docker-compose.webgpu.yml up -d
+# WebGPU mode (frontend only) - DEFAULT
+docker compose up -d
 
 # Full stack with Ollama
-docker compose up -d
+docker compose --profile ollama up -d
 
 # Full stack with vLLM (GPU server)
 docker compose --profile vllm up -d

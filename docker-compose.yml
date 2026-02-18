@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # Frontend (always needed)
+  # Frontend (always available, works standalone with WebGPU)
   frontend:
     build:
       context: ./frontend
@@ -10,12 +10,12 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      - AGENT_API_URL=http://backend:8000
-    depends_on:
-      - backend
+      - AGENT_API_URL=${AGENT_API_URL:-http://backend:8000}
     restart: unless-stopped
+    # Note: No depends_on for backend
+    # Frontend works standalone with WebGPU mode
 
-  # Backend (needed for Ollama/vLLM modes)
+  # Backend (only needed for Ollama/vLLM modes)
   backend:
     build:
       context: .
@@ -27,8 +27,12 @@ services:
       - NEMOTRON_MODEL=${NEMOTRON_MODEL:-nemotron}
       - NEMOTRON_API_KEY=${NEMOTRON_API_KEY:-}
     restart: unless-stopped
+    profiles:
+      - ollama
+      - vllm
+      - backend
 
-  # Ollama (default LLM backend)
+  # Ollama (default LLM backend for local development)
   ollama:
     image: ollama/ollama:latest
     ports:
@@ -36,6 +40,8 @@ services:
     volumes:
       - ollama_data:/root/.ollama
     restart: unless-stopped
+    profiles:
+      - ollama
 
   # Ollama model puller (runs once to download nemotron)
   ollama-pull:
@@ -56,6 +62,8 @@ services:
       echo 'Model downloaded successfully!';
       "
     restart: "no"
+    profiles:
+      - ollama
 
   # vLLM (alternative to Ollama, GPU required)
   vllm:
