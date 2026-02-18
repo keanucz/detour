@@ -110,37 +110,67 @@ Open [http://localhost:3000](http://localhost:3000)
 
 ---
 
-### 3. 🚀 Production Mode (Docker)
+### 3. 🚀 Docker Mode (Three Options)
 
-Full deployment with Docker (includes backend, frontend, and Ollama):
+Run with Docker using one of three modes:
+
+#### Option A: WebGPU Only (Recommended for Homelabs)
+
+Frontend only, AI runs in browsers:
 
 ```bash
-# Clone
+git clone https://github.com/keanucz/detour.git
+cd detour
+
+# Start with helper script
+./start.sh --webgpu
+
+# Or use docker compose directly
+docker compose -f docker-compose.webgpu.yml up --build
+```
+
+This starts just the frontend. Users get AI in their browsers via WebGPU. Perfect for homelabs because it doesn't use any GPU resources on your server.
+
+#### Option B: Full Stack with Ollama (Better Quality)
+
+Frontend + Backend + Ollama:
+
+```bash
 git clone https://github.com/keanucz/detour.git
 cd detour
 
 # Copy environment config
 cp .env.example .env
 
-# Start everything
+# Start with helper script (easy way)
+./start.sh --ollama
+
+# Or use docker compose directly
 docker compose up --build
 ```
 
-**With GPU acceleration:**
-```bash
-# NVIDIA GPU (Linux/Windows)
-docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
+First run downloads the Nemotron model (about 20GB, takes 5-10 minutes). After that, startups are instant because the model is cached.
 
-# Or use the helper script
-./start.sh --gpu
-```
+**Windows users:** Use `.\start.ps1` instead of `./start.sh`
 
-**With vLLM (faster inference):**
+#### Option C: Full Stack with vLLM (Fastest, GPU Required)
+
+Frontend + Backend + vLLM:
+
 ```bash
+git clone https://github.com/keanucz/detour.git
+cd detour
+
+# Requires NVIDIA GPU
+./start.sh --vllm
+
+# Or use docker compose directly
 docker compose --profile vllm up --build
 ```
 
-Open [http://localhost:3000](http://localhost:3000)
+This uses GPU acceleration for faster inference. Requires NVIDIA GPU with 24GB+ VRAM.
+
+**All modes:** Open [http://localhost:3000](http://localhost:3000) when ready
 
 ---
 
@@ -293,32 +323,44 @@ NEMOTRON_MODEL=nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4
 
 ## Configuration
 
-All settings are in `.env`:
+Settings are managed through `.env` file. Create it first:
 
 ```bash
-# Frontend
-NEXT_PUBLIC_API_URL=http://localhost:8000
-
-# Backend API
-PORT=8000
-
-# LLM Backend (choose one)
-NEMOTRON_BASE_URL=http://localhost:11434/v1  # Ollama
-# NEMOTRON_BASE_URL=http://localhost:8001/v1   # vLLM
-# NEMOTRON_BASE_URL=http://192.168.1.100:11434/v1  # Remote
-
-NEMOTRON_MODEL=nemotron  # For Ollama
-# NEMOTRON_MODEL=nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4  # For vLLM
-
-# Optional: API key for OpenAI/NVIDIA NIM
-NEMOTRON_API_KEY=
+cp .env.example .env
 ```
 
-**Switching between backends:**
+**For WebGPU mode:** No configuration needed! The app auto-detects WebGPU and uses it by default.
 
-1. **WebGPU (browser)** → No config needed, select in UI
-2. **Ollama (local)** → Use defaults above
-3. **vLLM (GPU server)** → Uncomment vLLM lines, restart backend
+**For Ollama/vLLM mode:** Edit `.env` to configure the backend:
+
+```bash
+# Frontend (where the backend API is)
+NEXT_PUBLIC_API_URL=http://localhost:8000
+
+# Backend API port
+PORT=8000
+
+# LLM Backend - pick one option:
+
+# Option 1: Ollama (default)
+NEMOTRON_BASE_URL=http://ollama:11434/v1
+NEMOTRON_MODEL=nemotron
+
+# Option 2: vLLM (uncomment these, comment Ollama)
+# NEMOTRON_BASE_URL=http://vllm:8000/v1
+# NEMOTRON_MODEL=nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4
+
+# Option 3: Remote server (uncomment these)
+# NEMOTRON_BASE_URL=http://192.168.1.100:11434/v1
+# NEMOTRON_MODEL=nemotron
+# NEMOTRON_API_KEY=your-key-here
+```
+
+**Quick switching:**
+
+- **WebGPU**: Just open the app, it's already the default
+- **Ollama**: `./start.sh --ollama` or `docker compose up`
+- **vLLM**: `./start.sh --vllm` or `docker compose --profile vllm up`
 
 ---
 
@@ -361,39 +403,37 @@ NEMOTRON_API_KEY=
 
 ## Deployment
 
-### Homelab Deployment (Recommended for Komodo Stack) 🏠
+### Homelab Deployment (Komodo Stack Ready) 🏠
 
-**Perfect for homelabs!** WebGPU mode means the AI runs in users' browsers, not on your server:
+**Perfect for homelabs!** Use the included `docker-compose.webgpu.yml` for a lightweight deployment:
 
-```yaml
-# docker-compose.yml (Komodo stack compatible)
-services:
-  detour-frontend:
-    build: ./frontend
-    ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=production
-    # No GPU needed! WebGPU runs in the browser
+```bash
+# WebGPU-only mode (recommended for homelabs)
+docker compose -f docker-compose.webgpu.yml up -d
 
-  detour-backend:
-    build: .
-    ports:
-      - "8000:8000"
-    environment:
-      - NEMOTRON_BASE_URL=http://ollama:11434/v1  # Optional
-    # Backend only needed for physics calculations
-    # LLM inference happens in the browser via WebGPU
+# Or use the helper script
+./start.sh --webgpu
 ```
 
-**Benefits for homelab:**
-- ✅ No GPU allocation needed — saves resources for other services
-- ✅ Users get low-latency inference (runs on their device)
-- ✅ Scales infinitely (each user uses their own browser GPU)
-- ✅ Works alongside GPU-heavy services (Stable Diffusion, Ollama, etc.)
+This starts only the frontend. AI runs in users' browsers, so your server stays free for other services.
 
-**To disable backend LLM entirely:**
-Just deploy the frontend. Users will automatically use WebGPU. Set up backend only if you need the full multi-agent physics pipeline.
+**For Komodo/Portainer stacks:**
+
+Just point to the repo and use `docker-compose.webgpu.yml` as your compose file. Done!
+
+**If you need the full agent pipeline with Ollama:**
+
+```bash
+docker compose up -d
+```
+
+This includes frontend, backend, and Ollama. The backend handles physics calculations and the full multi-agent pipeline.
+
+**Benefits for homelab:**
+- ✅ No GPU needed on server (WebGPU mode)
+- ✅ Scales infinitely (each user uses their own device)
+- ✅ Works alongside other services
+- ✅ Simple one-command deployment
 
 ---
 
@@ -418,20 +458,41 @@ No backend or GPU needed — the AI runs in the user's browser!
 
 ---
 
-### Full Stack Deployment (with Backend)
+### Production Deployment Options
 
-Deploy backend + frontend + Ollama/vLLM (optional):
+**Option 1: WebGPU-only (Easiest)**
 
-**Using Docker:**
+Deploy just the frontend to any static host:
+
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+cd frontend
+npm run build
+# Deploy the .next folder to your host
 ```
 
-**Manual deployment:**
-1. Deploy backend (FastAPI) to any Python host (Render, Railway, Fly.io)
-2. Deploy frontend to Vercel/Netlify
-3. Point frontend to backend URL in `.env`
-4. *Optional:* Run Ollama/vLLM on a separate GPU server (only if users want to switch from WebGPU)
+Works on: Vercel, Netlify, Cloudflare Pages, or any static hosting.
+
+**Option 2: Full Stack (Docker)**
+
+Deploy everything with Docker:
+
+```bash
+# WebGPU mode (frontend only)
+docker compose -f docker-compose.webgpu.yml up -d
+
+# Full stack with Ollama
+docker compose up -d
+
+# Full stack with vLLM (GPU server)
+docker compose --profile vllm up -d
+```
+
+**Option 3: Split Deployment**
+
+1. Deploy frontend to Vercel/Netlify
+2. Deploy backend to any Python host (Render, Railway, Fly.io)
+3. Update `NEXT_PUBLIC_API_URL` in frontend to point to backend
+4. Optional: Run Ollama/vLLM on a separate GPU server
 
 ---
 

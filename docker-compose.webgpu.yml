@@ -1,0 +1,15 @@
+version: '3.8'
+
+# WebGPU-only mode (no backend LLM needed)
+# AI runs in users' browsers, perfect for homelabs
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped

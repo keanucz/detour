@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  # Frontend (always needed)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - AGENT_API_URL=http://backend:8000
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # Backend (needed for Ollama/vLLM modes)
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - NEMOTRON_BASE_URL=${NEMOTRON_BASE_URL:-http://ollama:11434/v1}
+      - NEMOTRON_MODEL=${NEMOTRON_MODEL:-nemotron}
+      - NEMOTRON_API_KEY=${NEMOTRON_API_KEY:-}
+    restart: unless-stopped
+
+  # Ollama (default LLM backend)
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+
+  # Ollama model puller (runs once to download nemotron)
+  ollama-pull:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_data:/root/.ollama
+    depends_on:
+      - ollama
+    entrypoint: /bin/sh
+    command: >
+      -c "
+      echo 'Waiting for Ollama to be ready...';
+      until ollama list > /dev/null 2>&1; do
+        sleep 2;
+      done;
+      echo 'Pulling nemotron model (this will take a while, ~20GB download)...';
+      ollama pull nemotron;
+      echo 'Model downloaded successfully!';
+      "
+    restart: "no"
+
+  # vLLM (alternative to Ollama, GPU required)
+  vllm:
+    image: nvcr.io/nvidia/vllm:26.01-py3
+    ports:
+      - "8001:8000"
+    volumes:
+      - vllm_cache:/root/.cache/huggingface
+    environment:
+      - HF_HOME=/root/.cache/huggingface
+      - VLLM_USE_FLASHINFER_MOE_FP4=1
+      - VLLM_FLASHINFER_MOE_BACKEND=throughput
+    command: >
+      python3 -m vllm.entrypoints.openai.api_server
+      --model nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4
+      --trust-remote-code
+      --max-model-len 8192
+      --gpu-memory-utilization 0.90
+      --dtype auto
+      --kv-cache-dtype fp8
+      --enable-auto-tool-choice
+      --tool-call-parser hermes
+      --enable-chunked-prefill
+      --port 8000
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+    profiles:
+      - vllm
+
+volumes:
+  ollama_data:
+  vllm_cache:
