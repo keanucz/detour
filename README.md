@@ -1,122 +1,556 @@
-# Detour — On-Board AI Agents Saving Satellites from Orbital Debris
+# Detour — Satellite Collision Avoidance AI
 
-**TreeHacks 2026 | NVIDIA Edge AI Track**
+**TL;DR:** An AI agent that runs on satellites to dodge space debris. Works in your browser with zero installation, or deploy it on real hardware.
 
-**Devpost**
-https://devpost.com/software/detour-64kpds?ref_content=user-portfolio&ref_feature=in_progress
+🏆 **TreeHacks 2026 · 4th Place NVIDIA Edge AI Track**
 
+---
 
-Detour is an autonomous collision-avoidance system that runs **on-board** a satellite using NVIDIA's Nemotron LLM on the ASUS Ascent GX10 (Grace Blackwell). A multi-agent LangGraph pipeline detects debris threats, assesses risk, plans maneuvers, validates safety constraints, and executes avoidance burns — all locally with zero ground-station latency.
+## What is this?
 
-## Architecture
+Detour is an autonomous collision-avoidance system for satellites. When debris is headed your way, it:
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                    ASUS Ascent GX10 (On-Board)                   │
-│                                                                  │
-│  ┌─────────┐  ┌──────────┐  ┌──────────┐  ┌────────┐  ┌──────┐ │
-│  │  SCOUT  │→ │ ANALYST  │→ │ PLANNER  │→ │ SAFETY │→ │ OPS  │ │
-│  │ scan &  │  │ risk &   │  │ maneuver │  │ verify │  │BRIEF │ │
-│  │ triage  │  │ refine   │  │ design   │  │& exec  │  │      │ │
-│  └─────────┘  └──────────┘  └──────────┘  └────────┘  └──────┘ │
-│       ↕             ↕             ↕             ↕               │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │              Physics Engine (deterministic)               │   │
-│  │  screening · risk · CW dynamics · RK4 · SGP4 · Chan Pc   │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-│       ↕                                                         │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │          Satellite Model (fuel, power, dynamics)          │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-│       ↕                                                         │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │  Nemotron 3 Nano 30B (NVFP4) via vLLM — local inference  │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-└──────────────────────────────────────────────────────────────────┘
-```
+1. **Scans** orbital data for upcoming threats
+2. **Calculates** collision probability using real physics
+3. **Plans** avoidance maneuvers considering fuel and safety
+4. **Executes** the burn autonomously (or waits for approval)
 
-## Key Components
+All of this runs **on-board** the satellite using local AI — no waiting for ground control.
 
-| Component | Path | Description |
-|-----------|------|-------------|
-| **Agent Pipeline** | `agents/` | LangGraph 5-agent pipeline with tool-calling |
-| **Physics Engine** | `engine/` | RK4 solver, J2 perturbation, CW dynamics, Chan collision probability |
-| **Satellite Model** | `engine/models/active_satellite.py` | Full orbital dynamics with resource management (fuel, power, battery) |
-| **Tool Wrappers** | `agents/tools.py` | 11 LangChain tools wrapping the physics engine |
-| **API** | `api/` | FastAPI server with agent, catalog, conjunction, and satellite endpoints |
-| **Frontend** | `frontend/` | Next.js + React Three Fiber 3D globe with live satellite tracking |
-| **Ascent GX10 Setup** | `scripts/setup_gx10.sh` | One-command setup for the ASUS Ascent GX10 |
+We built this for the [NVIDIA Ascent GX10](https://www.asus.com/us/networking-iot-servers/aiot-industrial-solutions/aiot-embedded-computers-edge-ai/asus-ascent-gx10/) (Grace Blackwell edge computer), but you can run it anywhere — even in your browser.
 
-## Agent Pipeline
-
-| Agent | Role | Tools |
-|-------|------|-------|
-| **Scout** | Scan catalog for upcoming conjunctions, triage by severity | `scan_conjunctions`, `scan_demo_conjunctions` |
-| **Analyst** | Deep risk assessment — Chan probability, high-fidelity TCA refinement | `assess_risk`, `refine_conjunction`, `propagate_orbit` |
-| **Planner** | Design avoidance maneuvers considering satellite resources | `propose_avoidance_maneuvers`, `simulate_maneuver`, `get_satellite_status`, `check_maneuver_feasibility` |
-| **Safety** | Validate constraints, approve or reject, execute approved burns | `check_maneuver_constraints`, `get_satellite_status`, `check_maneuver_feasibility`, `execute_maneuver_on_satellite` |
-| **Ops Brief** | Generate human-readable summary for operators | _(synthesis only)_ |
+---
 
 ## Quick Start
 
-### 1. Backend
+**Three ways to run it:**
+
+### 1. 🌐 Browser Mode (No Installation)
+
+Just clone and run the frontend. The AI runs directly in your browser using [WebGPU](https://developer.mozilla.org/en-US/docs/Web/API/WebGPU_API):
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-uvicorn api.app:app --reload --port 8000
+git clone https://github.com/keanucz/detour.git
+cd detour/frontend
+npm install
+npm run dev
 ```
 
-### 2. Frontend
+Open [http://localhost:3000](http://localhost:3000) and you're done.
+
+**Requirements:**
+- Chrome or Edge 113+ (WebGPU enabled by default)
+- 4GB+ RAM
+- Any GPU (Intel, NVIDIA, AMD — even integrated graphics)
+
+**How it works:** The first time you click "Run", it downloads a ~1.7GB AI model to your browser cache. After that, everything runs locally with zero latency.
+
+---
+
+### 2. 🖥️ Local Server Mode (Better Quality)
+
+Run the full pipeline with Ollama serving Nemotron locally:
+
+#### Windows
+```powershell
+# Install Ollama
+winget install ollama
+
+# Start Ollama
+ollama serve
+
+# In a new terminal, pull the model
+ollama pull nemotron
+
+# Start frontend
+cd frontend
+npm install
+npm run dev
+
+# Start backend (optional, for full agent pipeline)
+pip install -r requirements.txt
+python -m uvicorn api.app:app --reload --port 8000
+```
+
+#### macOS
+```bash
+# Install Ollama
+brew install ollama
+ollama serve &
+ollama pull nemotron
+
+# Start frontend
+cd frontend
+npm install
+npm run dev
+
+# Start backend (optional)
+pip3 install -r requirements.txt
+python3 -m uvicorn api.app:app --reload --port 8000
+```
+
+#### Linux
+```bash
+# Install Ollama
+curl -fsSL https://ollama.com/install.sh | sh
+ollama serve &
+ollama pull nemotron
+
+# Start frontend
+cd frontend
+npm install
+npm run dev
+
+# Start backend (optional)
+pip install -r requirements.txt
+python -m uvicorn api.app:app --reload --port 8000
+```
+
+Open [http://localhost:3000](http://localhost:3000)
+
+---
+
+### 3. 🚀 Production Mode (Docker)
+
+Full deployment with Docker (includes backend, frontend, and Ollama):
+
+```bash
+# Clone
+git clone https://github.com/keanucz/detour.git
+cd detour
+
+# Copy environment config
+cp .env.example .env
+
+# Start everything
+docker compose up --build
+```
+
+**With GPU acceleration:**
+```bash
+# NVIDIA GPU (Linux/Windows)
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
+
+# Or use the helper script
+./start.sh --gpu
+```
+
+**With vLLM (faster inference):**
+```bash
+docker compose --profile vllm up --build
+```
+
+Open [http://localhost:3000](http://localhost:3000)
+
+---
+
+## How It Works
+
+### Architecture
+
+```
+┌─────────────────────────────────────────┐
+│  Frontend (Next.js + React Three)      │
+│  • 3D globe with live satellite viz    │
+│  • Agent terminal with streaming logs   │
+│  • Collision alerts & maneuver display  │
+└──────────────┬──────────────────────────┘
+               │
+               ↓
+┌─────────────────────────────────────────┐
+│  LLM Backend (3 options)                │
+│  1. WebGPU (browser, Qwen3-1.7B)        │ ← Zero installation
+│  2. Ollama (local, Nemotron)            │ ← Better quality
+│  3. vLLM (GPU server, Nemotron)         │ ← Production
+└──────────────┬──────────────────────────┘
+               │
+               ↓
+┌─────────────────────────────────────────┐
+│  Agent Pipeline (LangGraph)             │
+│  Scout → Analyst → Planner → Safety     │
+└──────────────┬──────────────────────────┘
+               │
+               ↓
+┌─────────────────────────────────────────┐
+│  Physics Engine                         │
+│  • Orbital mechanics (SGP4, RK4)        │
+│  • Collision probability (Chan method)  │
+│  • Clohessy-Wiltshire dynamics          │
+└─────────────────────────────────────────┘
+```
+
+### The Five Agents
+
+Each agent is a specialized AI with specific tools:
+
+1. **Scout** — Scans space catalog for upcoming conjunctions
+2. **Analyst** — Calculates collision probability and refines trajectory predictions
+3. **Planner** — Designs avoidance maneuvers (considers fuel, battery, thrust limits)
+4. **Safety** — Validates constraints and executes approved burns
+5. **Ops Brief** — Generates human-readable summary
+
+They work together in a [LangGraph](https://www.langchain.com/langgraph) pipeline, passing data back and forth until a safe decision is made.
+
+---
+
+## Three LLM Backends
+
+You can switch between three backends depending on your needs:
+
+### Option 1: WebGPU (Browser)
+
+**When to use:** Demos, development, deployment to a website
+
+**Pros:**
+- Zero installation
+- Runs offline after first load
+- Works on any device with a modern browser
+- Free (no API costs)
+
+**Cons:**
+- Smaller models (Qwen3-1.7B vs Nemotron-30B)
+- Slower on low-end hardware
+
+**How to use:**
+1. Open the app in Chrome/Edge
+2. Click the terminal at the bottom
+3. Click ⚙️ Settings → WebLLM
+4. Click Initialize (first time only)
+5. Click Run
+
+**Available models:**
+- Qwen3-0.6B (600MB, fast)
+- **Qwen3-1.7B** (1.7GB, recommended)
+- Qwen3-4B (4GB, better quality)
+- Qwen3-8B (8GB, best quality)
+
+---
+
+### Option 2: Ollama (Local Server)
+
+**When to use:** Development, full agent pipeline, better quality
+
+**Pros:**
+- Runs the full Nemotron 30B model
+- Better reasoning and tool-calling
+- Complete multi-agent pipeline
+- Still local and private
+
+**Cons:**
+- Requires ~20GB disk space
+- Needs manual installation
+- CPU inference is slower
+
+**Setup:**
+
+1. Install Ollama: https://ollama.com/download
+2. Pull the model:
+   ```bash
+   ollama pull nemotron
+   ```
+3. It just works — the app will auto-connect to `localhost:11434`
+
+**Switching in the UI:**
+1. Click terminal → ⚙️ Settings
+2. Select "Remote Backend"
+3. Click Run
+
+---
+
+### Option 3: vLLM (GPU Server)
+
+**When to use:** Production deployment, Ascent GX10, DGX, cloud inference
+
+**Pros:**
+- Fastest inference (GPU optimized)
+- Supports 4-bit quantization (NVFP4)
+- Best for real satellite hardware
+
+**Cons:**
+- Requires NVIDIA GPU
+- More complex setup
+
+**Setup:**
+
+```bash
+# Using Docker
+docker compose --profile vllm up --build
+```
+
+Or configure a remote endpoint in `.env`:
+```bash
+NEMOTRON_BASE_URL=http://your-vllm-server:8001/v1
+NEMOTRON_MODEL=nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4
+```
+
+---
+
+## Configuration
+
+All settings are in `.env`:
+
+```bash
+# Frontend
+NEXT_PUBLIC_API_URL=http://localhost:8000
+
+# Backend API
+PORT=8000
+
+# LLM Backend (choose one)
+NEMOTRON_BASE_URL=http://localhost:11434/v1  # Ollama
+# NEMOTRON_BASE_URL=http://localhost:8001/v1   # vLLM
+# NEMOTRON_BASE_URL=http://192.168.1.100:11434/v1  # Remote
+
+NEMOTRON_MODEL=nemotron  # For Ollama
+# NEMOTRON_MODEL=nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4  # For vLLM
+
+# Optional: API key for OpenAI/NVIDIA NIM
+NEMOTRON_API_KEY=
+```
+
+**Switching between backends:**
+
+1. **WebGPU (browser)** → No config needed, select in UI
+2. **Ollama (local)** → Use defaults above
+3. **vLLM (GPU server)** → Uncomment vLLM lines, restart backend
+
+---
+
+## Browser Requirements (WebGPU Mode)
+
+| Browser | Status | Notes |
+|---------|--------|-------|
+| **Chrome 113+** | ✅ Works perfectly | Recommended |
+| **Edge 113+** | ✅ Works perfectly | Windows optimized |
+| **Firefox 121+** | ⚠️ Experimental | Enable `dom.webgpu.enabled` in `about:config` |
+| **Safari 18+** | ⚠️ Limited | WebGPU still experimental |
+
+**Check if your browser supports WebGPU:**
+1. Open developer console (F12)
+2. Type: `navigator.gpu !== undefined`
+3. If it says `true`, you're good!
+
+---
+
+## System Requirements
+
+### Browser Mode
+- **RAM:** 4GB minimum, 8GB recommended
+- **GPU:** Any (Intel HD, NVIDIA, AMD)
+- **Storage:** ~2GB browser cache
+- **OS:** Windows, macOS, Linux
+
+### Ollama Mode
+- **RAM:** 16GB recommended for Nemotron 30B
+- **Disk:** 20GB for model storage
+- **GPU:** Optional (CPU works, just slower)
+- **OS:** Windows, macOS, Linux
+
+### vLLM Mode
+- **GPU:** NVIDIA with 24GB+ VRAM
+- **VRAM:** 15GB for Nemotron 4-bit quantized
+- **OS:** Linux (Docker required)
+
+---
+
+## Deployment
+
+### Static Site Hosting (WebGPU Only)
+
+Since WebGPU runs in the browser, you can deploy the frontend as a static site:
 
 ```bash
 cd frontend
-npm install
-npm run dev  # localhost:3000
+npm run build
+npm run export  # Generates static HTML/JS
 ```
 
-### 3. Agent System (with Ascent GX10)
+Deploy to:
+- **Vercel:** `vercel deploy`
+- **Netlify:** `netlify deploy`
+- **GitHub Pages:** `npm run deploy`
+- **AWS S3:** Upload `out/` folder
+
+No backend needed — the AI runs in the user's browser!
+
+---
+
+### Full Stack Deployment (with Backend)
+
+Deploy backend + frontend + Ollama/vLLM:
+
+**Using Docker:**
+```bash
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+**Manual deployment:**
+1. Deploy backend (FastAPI) to any Python host (Render, Railway, Fly.io)
+2. Deploy frontend to Vercel/Netlify
+3. Point frontend to backend URL in `.env`
+4. Run Ollama/vLLM on a separate GPU server
+
+---
+
+## Project Structure
+
+```
+detour/
+├── agents/           # LangGraph multi-agent pipeline
+│   ├── run.py        # Main agent runner
+│   ├── graph.py      # Agent workflow definition
+│   └── tools.py      # Tool wrappers for physics engine
+├── api/              # FastAPI backend
+│   └── app.py        # API endpoints (agent, catalog, satellite)
+├── engine/           # Physics & orbital mechanics
+│   ├── physics.py    # RK4 solver, J2 perturbations
+│   ├── screening.py  # Collision detection
+│   └── models/       # Satellite simulation
+├── frontend/         # Next.js dashboard
+│   ├── components/   # React components
+│   ├── lib/          # LLM providers (WebGPU, Ollama, vLLM)
+│   └── app/          # Pages
+└── scripts/          # Deployment scripts
+```
+
+---
+
+## Troubleshooting
+
+### "WebGPU not available"
+
+**Solution:**
+1. Update to Chrome 113+ or Edge 113+
+2. Enable hardware acceleration in browser settings
+3. Update GPU drivers
+4. Try Firefox → `about:config` → set `dom.webgpu.enabled` to `true`
+5. Fall back to Ollama mode
+
+---
+
+### "Cannot connect to LLM backend"
+
+**If using Browser mode:**
+- Just click "Initialize" in the terminal settings
+
+**If using Ollama:**
+```bash
+# Check if Ollama is running
+curl http://localhost:11434/api/tags
+
+# If not, start it
+ollama serve
+
+# Pull the model if needed
+ollama pull nemotron
+```
+
+**If using vLLM:**
+```bash
+# Check vLLM logs
+docker compose logs vllm
+
+# Restart if needed
+docker compose restart vllm
+```
+
+---
+
+### Model download is slow/stuck
+
+**Browser mode:**
+- First download takes 5-10 minutes for 1.7GB
+- Progress shows in the terminal
+- If stuck, clear browser cache and retry
+
+**Ollama mode:**
+```bash
+# Watch download progress
+docker compose logs -f ollama-pull
+
+# Or if running natively
+ollama pull nemotron  # Shows progress
+```
+
+---
+
+### Out of memory
+
+**Browser crashes:**
+- Use smaller model (Qwen3-0.6B)
+- Close other tabs
+- Restart browser
+- Switch to Ollama mode
+
+**Ollama runs out of RAM:**
+- Reduce `num_ctx` in Ollama config
+- Use a quantized model
+- Switch to vLLM with GPU
+
+---
+
+## Development
+
+### Running Tests
 
 ```bash
-# Start Nemotron on the Ascent GX10
-chmod +x scripts/setup_gx10.sh
-./scripts/setup_gx10.sh
+# Backend
+pytest
 
-# Run agent pipeline
-python -m agents.run "Scan for conjunction threats to satellite 25544 in the next 48 hours" --demo
+# Frontend
+cd frontend
+npm test
 ```
 
-### 4. Agent System (without GPU — dev mode)
+### Code Style
 
 ```bash
-# Set OPENAI fallback in .env
-NEMOTRON_BASE_URL=https://api.openai.com/v1
-NEMOTRON_API_KEY=sk-...
-NEMOTRON_MODEL=gpt-4o-mini
+# Python
+black .
+ruff check .
 
-python -m agents.run "Scan for threats" --demo
+# TypeScript
+cd frontend
+npm run lint
 ```
 
-## Model
+### Adding New Tools
 
-**nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4** — 4-bit quantized (NVFP4) for fast edge inference on the Ascent GX10. ~15GB model weight footprint, leaving ample memory for KV cache and concurrent requests on the 128GB unified memory Grace Blackwell SoC.
+1. Add function to `engine/physics.py` or `engine/screening.py`
+2. Create wrapper in `agents/tools.py`
+3. Register in `agents/config.py`
+4. Agents will automatically discover and use it
 
-Served locally via NGC vLLM container with tool-calling (`--enable-auto-tool-choice --tool-call-parser hermes --enable-chunked-prefill`).
-
-## Why Edge AI?
-
-| Ground Station | On-Board (Detour) |
-|---------------|-------------------|
-| 5-15 min communication delay | **< 1 sec** decision |
-| Limited pass windows | **24/7** monitoring |
-| Single point of failure | **Autonomous** operation |
-| Manual operator in the loop | **Agent-validated** decisions |
-
-In LEO, a debris collision can happen in minutes. You can't wait for the next ground station pass.
+---
 
 ## Team
 
-- **Justyna** — Frontend, 3D Visualization, UI/UX
-- **Ethan** — ASUS Ascent GX10 Setup, Simulation Logic
-- **Adit** — Satellite Data Feed, Simulation Logic
-- **Keanu** — Ascent GX10 vLLM Setup, LangChain NVIDIA Nemotron Agent System
+- **Keanu** — Agent system, vLLM setup, tool integration
+- **Justyna** — Frontend, 3D visualization, UI/UX
+- **Ethan** — Ascent GX10 setup, simulation logic
+- **Adit** — Satellite data feed, collision detection
+
+---
+
+## License
+
+MIT License - see [LICENSE](LICENSE)
+
+---
+
+## Links
+
+- **Devpost:** https://devpost.com/software/detour-64kpds
+- **Demo:** https://detour-ai.vercel.app (coming soon)
+- **Paper:** [docs/paper.pdf](docs/paper.pdf) (coming soon)
+
+---
+
+## Acknowledgments
+
+Built for TreeHacks 2026 · NVIDIA Edge AI Track
+
+Special thanks to:
+- NVIDIA for the Ascent GX10 hardware and support
+- ASUS for the amazing edge computing platform
+- TreeHacks organizers for an incredible hackathon

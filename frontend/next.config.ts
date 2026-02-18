@@ -1,12 +1,14 @@
 import type { NextConfig } from "next"
 
-const AGENT_BACKEND = process.env.AGENT_API_URL ?? "https://detour-backend.keanuc.net"
-const LLM_BACKEND = process.env.LLM_API_URL ?? "https://detour-ai.keanuc.net"
+const AGENT_BACKEND = process.env.AGENT_API_URL ?? "http://localhost:8000"
+const LLM_BACKEND = process.env.LLM_API_URL ?? "http://localhost:11434/v1"
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   reactStrictMode: true,
   env: {
     AGENT_API_URL: AGENT_BACKEND,
+    LLM_API_URL: LLM_BACKEND,
   },
   async rewrites() {
     return [

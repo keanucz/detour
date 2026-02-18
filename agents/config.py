@@ -36,9 +36,9 @@ from typing import Optional
 class LLMConfig:
     """Configuration for the LLM backend."""
     # Endpoint
-    base_url: str = "https://detour-ai.keanuc.net/v1"
+    base_url: str = "http://localhost:11434/v1"
     api_key: str = "not-needed"
-    model: str = "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4"
+    model: str = "nemotron"
 
     # Generation parameters
     temperature: float = 0.3          # low for deterministic tool-calling
@@ -51,11 +51,18 @@ class LLMConfig:
 
     @classmethod
     def from_env(cls) -> "LLMConfig":
-        """Build config from environment variables."""
+        """Build config from environment variables.
+
+        Supports any OpenAI-compatible API server:
+          - Ollama:  NEMOTRON_BASE_URL=http://localhost:11434/v1
+          - vLLM:    NEMOTRON_BASE_URL=http://localhost:8001/v1
+          - OpenAI:  NEMOTRON_BASE_URL=https://api.openai.com/v1
+          - Remote:  NEMOTRON_BASE_URL=http://<your-host>:<port>/v1
+        """
         return cls(
-            base_url=os.getenv("NEMOTRON_BASE_URL", "https://detour-ai.keanuc.net/v1"),
+            base_url=os.getenv("NEMOTRON_BASE_URL", "http://localhost:11434/v1"),
             api_key=os.getenv("NEMOTRON_API_KEY", "not-needed"),
-            model=os.getenv("NEMOTRON_MODEL", "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4"),
+            model=os.getenv("NEMOTRON_MODEL", "nemotron"),
             temperature=float(os.getenv("NEMOTRON_TEMPERATURE", "0.3")),
             max_tokens=int(os.getenv("NEMOTRON_MAX_TOKENS", "2048")),
         )
@@ -81,6 +88,16 @@ class LLMConfig:
 # Quick presets
 LOCAL_GX10 = LLMConfig(
     base_url="https://detour-ai.keanuc.net/v1",
+    model="nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4",
+)
+
+OLLAMA_LOCAL = LLMConfig(
+    base_url="http://localhost:11434/v1",
+    model="nemotron",
+)
+
+VLLM_LOCAL = LLMConfig(
+    base_url="http://localhost:8001/v1",
     model="nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-NVFP4",
 )
 

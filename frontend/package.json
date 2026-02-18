@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@mlc-ai/web-llm": "^0.2.81",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.5.0",
     "class-variance-authority": "^0.7.1",

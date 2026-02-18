@@ -12,6 +12,9 @@ env/
 # Environment / secrets
 .env
 
+# Docker (auto-generated GPU override)
+docker-compose.gpu.yml
+
 # TLE cache
 tle_cache.json
 

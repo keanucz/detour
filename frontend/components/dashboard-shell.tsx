@@ -14,7 +14,7 @@ import { GlobeView } from "@/components/globe-view"
 import { LeftPanelContent, type FeedEvent } from "@/components/left-panel-content"
 import { SidePanel } from "@/components/side-panel"
 import { SimulationControls } from "@/components/simulation-controls"
-import { TerminalDrawer, type TerminalDrawerHandle } from "@/components/terminal-drawer"
+import { TerminalDrawerWebLLM, type TerminalDrawerHandle } from "@/components/terminal-drawer-webllm"
 import { SimEngine, naiveDecider, DEFAULT_SIM_CONFIG, type InitialDebrisPos } from "@/lib/sim-engine"
 
 const DEFAULT_CONSTRAINTS: PlannerConstraints = {
@@ -40,7 +40,7 @@ export function DashboardShell() {
   const [feedEvents, setFeedEvents] = useState<FeedEvent[]>([])
   const lastAutoTriggerHash = useRef("")
   const lastAutoTriggerTime = useRef(0)
-  const terminalRef = useRef<TerminalDrawerHandle>(null)
+  const terminalRef = useRef<TerminalDrawerWebLLMHandle>(null)
 
   // Real-time simulation state
   const [simActive, setSimActive] = useState(false)
@@ -267,7 +267,7 @@ export function DashboardShell() {
           </SidePanel>
 
           {!simActive && (
-            <TerminalDrawer
+            <TerminalDrawerWebLLM
               ref={terminalRef}
               className="lg:col-start-2 lg:row-start-2"
               isOpen={terminalOpen}
