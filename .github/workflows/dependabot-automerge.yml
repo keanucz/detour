@@ -1,0 +1,106 @@
+# Auto-merge Dependabot PRs so they stop piling up.
+#
+# Policy:
+#   - semver patch and minor updates: squash-merge straight away.
+#   - semver major (or unknown) updates: only when REPO_HAS_PR_CI is "true", and
+#     only after every other check on the PR has finished green. Otherwise the PR
+#     is left open for manual review.
+#
+# There are no required status checks on the default branch, so
+# `gh pr merge --auto` usually fails with "clean status"; in that case we merge
+# directly. Branch protection (if added later) still applies to the direct merge.
+#
+# Note: merges made with GITHUB_TOKEN do not trigger push workflows (deploys).
+name: Dependabot auto-merge
+
+on: pull_request
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+  statuses: read
+
+jobs:
+  automerge:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    timeout-minutes: 60
+    steps:
+      - name: Fetch Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@v3
+
+      - name: Merge when policy allows
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          UPDATE_TYPE: ${{ steps.meta.outputs.update-type }}
+          DEPS: ${{ steps.meta.outputs.dependency-names }}
+          SELF_WORKFLOW: ${{ github.workflow }}
+          # "true" when this repo has CI that runs on pull_request.
+          REPO_HAS_PR_CI: "false"
+        run: |
+          set -euo pipefail
+          echo "Dependencies: ${DEPS}"
+          echo "Update type: ${UPDATE_TYPE:-unknown}"
+
+          merge_pr() {
+            local out
+            if out=$(gh pr merge --squash --auto "$PR_URL" 2>&1); then
+              echo "$out"
+              return 0
+            fi
+            echo "Auto-merge not available (${out}); merging directly."
+            gh pr merge --squash "$PR_URL"
+          }
+
+          # Waits for every check except this workflow's own job. Returns 0 only
+          # when at least one other check exists and none failed.
+          wait_for_ci() {
+            local start=$SECONDS checks total failed pending
+            while true; do
+              checks=$(gh pr checks "$PR_URL" --json name,bucket,workflow 2>/dev/null || true)
+              if ! echo "$checks" | jq -e 'type == "array"' >/dev/null 2>&1; then
+                checks='[]'
+              fi
+              checks=$(echo "$checks" | jq -c --arg self "$SELF_WORKFLOW" '[.[] | select(.workflow != $self)]')
+              total=$(echo "$checks" | jq 'length')
+              failed=$(echo "$checks" | jq '[.[] | select(.bucket == "fail" or .bucket == "cancel")] | length')
+              pending=$(echo "$checks" | jq '[.[] | select(.bucket == "pending")] | length')
+              if [ "$failed" -gt 0 ]; then
+                echo "CI failed:"
+                echo "$checks" | jq -r '.[] | select(.bucket == "fail" or .bucket == "cancel") | "  - \(.name)"'
+                return 1
+              fi
+              if [ "$total" -gt 0 ] && [ "$pending" -eq 0 ]; then
+                return 0
+              fi
+              if [ "$total" -eq 0 ] && [ $((SECONDS - start)) -gt 600 ]; then
+                echo "No CI checks reported after 10 minutes."
+                return 1
+              fi
+              if [ $((SECONDS - start)) -gt 2700 ]; then
+                echo "CI still pending after 45 minutes."
+                return 1
+              fi
+              sleep 30
+            done
+          }
+
+          case "$UPDATE_TYPE" in
+            version-update:semver-patch|version-update:semver-minor)
+              merge_pr
+              ;;
+            *)
+              if [ "$REPO_HAS_PR_CI" != "true" ]; then
+                echo "::notice::Major or unknown update and no PR CI in this repo; leaving for manual review."
+                exit 0
+              fi
+              if wait_for_ci; then
+                merge_pr
+              else
+                echo "::notice::Major or unknown update without green CI; leaving for manual review."
+              fi
+              ;;
+          esac
